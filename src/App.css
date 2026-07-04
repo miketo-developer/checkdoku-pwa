@@ -1,0 +1,215 @@
+/* --- Global & Layout --- */
+.app {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px;
+  font-family: system-ui;
+  text-align: center;
+}
+
+.grid {
+  display: grid;
+  gap: 4px;
+  margin: 16px auto;
+  width: 90vmin;
+  max-width: 500px;
+  touch-action: none;
+  user-select: none;
+}
+
+.status {
+  margin-top: 10px;
+  min-height: 20px;
+  color: #b91c1c;
+}
+
+/* --- Components: Buttons & Toolbars --- */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+button {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  color: #111827;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+button:hover { background: #a3f790; }
+button.active { background: #111827; color: white; }
+
+/* --- Components: Cells --- */
+.cell {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.05s;
+}
+
+.cell:active { transform: scale(0.96); }
+
+/* --- Visuals: Marks & Emojis --- */
+.mark-emoji {
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
+}
+
+.mark-circle {
+  width: 60%;
+  height: 60%;
+  border: 3px solid #111;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.mark-x {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.mark-x.user { 
+  color: #000; 
+  text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; 
+}
+
+.mark-x.auto { 
+  color: #fff; 
+  text-shadow: 0 0 3px #000; 
+  opacity: 0.95; 
+}
+
+/* --- Components: Palette & Color Picker --- */
+.palette {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.current-color {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 2px solid #111827;
+  cursor: pointer;
+}
+
+.color {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #ccc;
+  cursor: pointer;
+}
+
+.color.selected { box-shadow: 0 0 0 3px #111827; }
+
+/* --- Palette Management Sections --- */
+.palette-section { margin-bottom: 10px; }
+
+.palette-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f3f4f6;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.color-wrapper { position: relative; }
+
+.color-delete {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #111;
+  color: #fff;
+  border: 1px solid #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+/* Interacción de eliminación */
+.color-wrapper:hover .color-delete { opacity: 1; pointer-events: auto; }
+
+@media (hover: none) {
+  .color-delete { opacity: 1; pointer-events: auto; }
+}
+
+
+
+
+:root { 
+  --bg:#d8d9da;        /* fondo página, no blanco puro */
+  --fg:#0f172a; 
+  --panel:#ffffff;
+  --border:#e2e8f0;
+  --cell-empty:#ffffff; /* celda vacía en claro */
+  --cell-border:#94a3b8; /* borde visible */
+}
+[data-theme="dark"] { 
+  --bg:#0b1220; 
+  --fg:#e5e7eb; 
+  --panel:#111827;
+  --border:#374151;
+  --cell-empty:#1f2937; /* celda vacía en oscuro */
+  --cell-border:#4b5563; 
+}
+
+h1 { 
+  color:var(--fg); 
+  text-align:center; 
+  margin:12px 0; 
+}
+
+body { background:var(--bg); color:var(--fg); }
+.app { background:var(--bg); color:var(--fg); }
+
+.theme-toggle {
+  position:fixed; top:10px; right:10px; z-index:100;
+  width:36px; height:36px; border-radius:50%;
+  border:1px solid var(--border); background:var(--panel);
+  cursor:pointer; font-size:18px;
+}
+
+.toolbar-section { margin:8px auto; max-width:500px; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.section-header { padding:8px 12px; background:var(--panel); display:flex; justify-content:space-between; font-weight:600; cursor:pointer; }
+.section-body { padding:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
