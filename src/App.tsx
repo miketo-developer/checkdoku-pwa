@@ -2,11 +2,9 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import Cropper from 'react-easy-crop'
 import './App.css'
 
-
 type Mark = 'none' | 'circle' | 'x-user' | 'x-auto'
 type Cell = { color: string; mark: Mark }
 type PixelCrop = { x:number; y:number; width:number; height:number }
-
 
 const DEFAULT_PALETTE = [
   '#96562f', // café
@@ -22,7 +20,6 @@ const DEFAULT_PALETTE = [
   '#da9cd2', // rosa pastel
   '#b25373', // rosa viejo
 ]
-
 
 const createEmpty = (n:number):Cell[][]=>Array.from({length:n},()=>Array.from({length:n},()=>({color:'#ffffff',mark:'none'})))
 
@@ -49,7 +46,7 @@ export default function App(){
   const [showDefault,setShowDefault]=useState(true)
   const [showCustom,setShowCustom]=useState(true)
   const [customPal,setCustomPal]=useState<string[]>(()=>JSON.parse(localStorage.getItem('custom-palette')||'[]'))
-  const [past,setPast]=useState<Cell[][][]>([]) // historial jugadas
+  const [past,setPast]=useState<Cell[][][]>([])
   const [theme,setTheme]=useState(()=>localStorage.getItem('theme')||'light')
   const [showEdit,setShowEdit]=useState(true)
   const [showGame,setShowGame]=useState(false)
@@ -60,9 +57,14 @@ export default function App(){
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastPainted = useRef<string|null>(null)
 
+  // Para drag de X
+  const [isDraggingX, setIsDraggingX] = useState(false)
+  const [dragModeX, setDragModeX] = useState<'paint' | 'erase' | null>(null)
+  const [visitedCells, setVisitedCells] = useState<Set<string>>(new Set())
+
   useEffect(()=>{document.documentElement.setAttribute('data-theme',theme);localStorage.setItem('theme',theme)},[theme])
   useEffect(()=>{localStorage.setItem('custom-palette',JSON.stringify(customPal))},[customPal])
-  useEffect(()=>{const up=()=>setIsPainting(false);window.addEventListener('pointerup',up);return()=>window.removeEventListener('pointerup',up)},[])
+  useEffect(()=>{const up=()=>{setIsPainting(false); setIsDraggingX(false)};window.addEventListener('pointerup',up);return()=>window.removeEventListener('pointerup',up)},[])
 
   const blockedColors = useMemo(()=>{
     const map=new Map<string,Cell[]>()
@@ -71,34 +73,26 @@ export default function App(){
   },[grid])
 
   const saveSnapshot=()=>setPast(p=>[...p,grid.map(r=>r.map(c=>({...c})))].slice(-50))
-  const selectColor=(col:string)=>{setSelectedColor(col); 
-    setShowPalette(false)}
-
-  
+  const selectColor=(col:string)=>{setSelectedColor(col); setShowPalette(false)}
   const deleteCustom=(col:string)=>{setCustomPal(p=>p.filter(c=>c!==col));if(selectedColor===col)setSelectedColor(DEFAULT_PALETTE[0])}
-
 
   const paintCell = (r:number, c:number, withHistory=false) => {
     if (withHistory) saveSnapshot()
     setGrid(prev => {
       const cell = prev[r][c]
-      // en arrastre no hacemos toggle, solo pintamos
       if (!withHistory && cell.color === selectedColor) return prev
-
       const g = prev.map(row => row.map(cell => ({...cell})))
       if (withHistory && g[r][c].color === selectedColor) {
-        g[r][c].color = '#ffffff'; g[r][c].mark = 'none' // click = borra
+        g[r][c].color = '#ffffff'; g[r][c].mark = 'none'
       } else {
-        g[r][c].color = selectedColor; g[r][c].mark = 'none' // arrastre = pinta
+        g[r][c].color = selectedColor; g[r][c].mark = 'none'
       }
       return applyAutoMarks(g)
     })
   }
 
-
   const rgbToHex = (r:number,g:number,b:number) =>
     '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')
-
 
   const hexToRgb = (hex:string) => {
     const h = hex.replace('#','')
@@ -129,7 +123,7 @@ export default function App(){
     reader.readAsDataURL(file)
     e.target.value = ''
   }
-  
+
   const getCroppedImg = (imageSrc:string, crop:PixelCrop):Promise<string> => {
     return new Promise(res => {
       const img = new Image()
@@ -145,7 +139,6 @@ export default function App(){
     })
   }
 
-
   const processCrop = async () => {
     if (!cropSrc ||!croppedArea) return
     const croppedDataUrl = await getCroppedImg(cropSrc, croppedArea)
@@ -159,23 +152,20 @@ export default function App(){
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(img, 0, 0, n, n)
 
-      const palette = [...DEFAULT_PALETTE,...customPal]
+      // Ahora usa paleta dinámica: default + custom si existe
+      const activePalette = customPal.length > 0? [...customPal,...DEFAULT_PALETTE] : DEFAULT_PALETTE
       const newGrid = createEmpty(n)
       for (let r=0;r<n;r++) for (let c=0;c<n;c++) {
         const [R,G,B] = ctx.getImageData(c,r,1,1).data
         const isWhite = R>240 && G>240 && B>240
-        newGrid[r][c].color = isWhite? '#ffffff' : nearestPalette(rgbToHex(R,G,B), palette)
+        newGrid[r][c].color = isWhite? '#ffffff' : nearestPalette(rgbToHex(R,G,B), activePalette)
       }
       saveSnapshot()
       setGrid(applyAutoMarks(newGrid))
     }
     img.src = croppedDataUrl
   }
-
-
-
-
-
+/*
   const handleGridDown = (e: React.PointerEvent) => {
     const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement | null
     if (!cell) return
@@ -197,20 +187,35 @@ export default function App(){
     if (!el) return
     const r = Number(el.dataset.r), c = Number(el.dataset.c)
     const key = `${r}-${c}`
-    if (lastPainted.current === key) return // evita repintar la misma
+    if (lastPainted.current === key) return
     lastPainted.current = key
     paintCell(r, c, false)
   }
 
   const handleGridUp = () => { setIsPainting(false); lastPainted.current = null }
+*/
+  // Toggle X de usuario
+  const toggleUserX = (r:number, c:number, force?: 'paint' | 'erase') => {
+    setGrid(prev => {
+      const cell = prev[r][c]
+      if (cell.mark === 'circle' || cell.mark === 'x-auto') return prev // No tocar X del sistema
 
+      const shouldPaint = force? force === 'paint' : cell.mark!== 'x-user'
+      if (!shouldPaint && cell.mark!== 'x-user') return prev
+      if (shouldPaint && cell.mark === 'x-user') return prev
 
+      const g = prev.map(row => row.map(c => ({...c})))
+      g[r][c].mark = shouldPaint? 'x-user' : 'none'
+      return applyAutoMarks(g)
+    })
+  }
 
   const handleAction=(r:number,c:number)=>{
     setStatus('');const n=grid.length
     if(mode==='xuser'){
-      if(grid[r][c].mark==='circle'||grid[r][c].mark==='x-auto'){setStatus('X del sistema no editable');return}
-      saveSnapshot();setGrid(p=>{const g=p.map(r=>r.map(c=>({...c})));g[r][c].mark=g[r][c].mark==='x-user'?'none':'x-user';return applyAutoMarks(g)});return
+      saveSnapshot()
+      toggleUserX(r,c)
+      return
     }
     if(mode==='circulo'){
       if(grid[r][c].color==='#ffffff'){setStatus('Pinta primero');return}
@@ -218,20 +223,50 @@ export default function App(){
     }
   }
 
+  // Drag para X en modo 'xuser'
+  const handleXDragStart = (r:number, c:number, e?: React.PointerEvent) => {
+    if (mode!== 'xuser') return
+    e?.preventDefault() // Evita scroll y zoom
+    const cell = grid[r][c]
+    if (cell.mark === 'circle' || cell.mark === 'x-auto') return
+
+    setIsDraggingX(true)
+    setVisitedCells(new Set([`${r}-${c}`]))
+    const newMode = cell.mark === 'x-user'? 'erase' : 'paint'
+    setDragModeX(newMode)
+    saveSnapshot()
+    toggleUserX(r, c, newMode)
+  }
+
+  const handleXDragEnter = (r:number, c:number) => {
+    if (!isDraggingX ||!dragModeX || mode!== 'xuser') return
+    const key = `${r}-${c}`
+    if (visitedCells.has(key)) return
+    const cell = grid[r][c]
+    if (cell.mark === 'circle' || cell.mark === 'x-auto') return
+
+    setVisitedCells(prev => new Set(prev).add(key))
+    toggleUserX(r, c, dragModeX)
+  }
+
+  const handleXDragEnd = () => {
+    setIsDraggingX(false)
+    setDragModeX(null)
+    setVisitedCells(new Set())
+  }
+
   const undo=()=>{setPast(p=>{if(p.length===0)return p;const last=p[p.length-1];setGrid(last);return p.slice(0,-1)})}
   const clearMarks=()=>{saveSnapshot();setGrid(p=>p.map(r=>r.map(c=>({...c,mark:'none'}))))}
-  //const saveToPalette=()=>{if(!fullPalette.includes(selectedColor)){const upd=[...customPal,selectedColor];setCustomPal(upd)}}
 
   return(
     <div className="app">
       <button className="theme-toggle" onClick={()=>setTheme(t=>t==='light'?'dark':'light')}>
-        {theme==='light'?'🌙':'☀️'}
+        {theme==='light'?'🌙':'☀'}
       </button>
 
       <h1>Matriz {grid.length}x{grid.length}</h1>
-      
+
       <div className="toolbar">
-        {/* MODO EDICIÓN */}
         <div className="toolbar-section">
           <div className="section-header" onClick={()=>setShowEdit(!showEdit)}>
             <span>Modo edición</span><span>{showEdit?'−':'+'}</span>
@@ -242,7 +277,6 @@ export default function App(){
               <button onClick={()=>{saveSnapshot();const n=Math.max(3,Math.min(20,newSize));setGrid(createEmpty(n));setStatus('')}}>Crear</button>
               <button onClick={()=>fileInputRef.current?.click()}>Importar foto</button>
               <input ref={fileInputRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handleFile} />
-
               <button className={mode==='pintar'?'active':''} onClick={()=>setMode('pintar')}>Pintar</button>
               <button onClick={clearMarks}>Limpiar marcas</button>
               <button onClick={()=>{saveSnapshot();setGrid(createEmpty(grid.length));setStatus('')}}>Reiniciar</button>
@@ -250,7 +284,6 @@ export default function App(){
           )}
         </div>
 
-        {/* MODO JUEGO */}
         <div className="toolbar-section">
           <div className="section-header" onClick={()=>setShowGame(!showGame)}>
             <span>Modo juego</span><span>{showGame?'−':'+'}</span>
@@ -265,10 +298,6 @@ export default function App(){
         </div>
       </div>
 
-
-      
-
-
       {mode==='pintar'&&<>
         <div className="picker-row">
           <div className="current-color" style={{background:selectedColor}} onClick={()=>setShowPalette(!showPalette)}/>
@@ -278,7 +307,6 @@ export default function App(){
 
         {showPalette&&(
           <div className="palette-dropdown">
-            {/* PREDETERMINADOS */}
             <div className="palette-section">
               <div className="palette-header" onClick={()=>setShowDefault(!showDefault)}>
                 <span>Predeterminados</span><span>{showDefault?'−':'+'}</span>
@@ -292,7 +320,6 @@ export default function App(){
               )}
             </div>
 
-            {/* MIS COLORES */}
             {customPal.length>0&&(
               <div className="palette-section">
                 <div className="palette-header" onClick={()=>setShowCustom(!showCustom)}>
@@ -314,23 +341,51 @@ export default function App(){
         )}
       </>}
 
-
-      
-
-      <div className="grid" 
+      <div className="grid"
         style={{gridTemplateColumns:`repeat(${grid.length},1fr)`, touchAction:'none'}}
-        onPointerDown={handleGridDown}
-        onPointerMove={handleGridMove}
-        onPointerUp={handleGridUp}
-        onPointerLeave={handleGridUp}>
-
+      >
         {grid.map((row,r)=>row.map((cell,c)=>(
-          <div key={`${r}-${c}`} 
-            className="cell" 
+          <div key={`${r}-${c}`}
+            className="cell"
             data-r={r} data-c={c}
+            onPointerDown={(e) => {
+              e.preventDefault()
+              ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) // CLAVE
+
+              if (mode === 'pintar') {
+                setIsPainting(true)
+                lastPainted.current = `${r}-${c}`
+                paintCell(r, c, true)
+              } else if (mode === 'xuser') {
+                handleXDragStart(r, c, e)
+              } else if (mode === 'circulo') {
+                handleAction(r, c)
+              }
+            }}
+            onPointerMove={(e) => {
+              // Ahora usamos PointerMove en la celda que capturó
+              const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cell') as HTMLElement | null
+              if (!el) return
+              const nr = Number(el.dataset.r), nc = Number(el.dataset.c)
+              
+              if (mode === 'pintar' && isPainting) {
+                const key = `${nr}-${nc}`
+                if (lastPainted.current === key) return
+                lastPainted.current = key
+                paintCell(nr, nc, false)
+              }
+              if (mode === 'xuser' && isDraggingX) {
+                handleXDragEnter(nr, nc)
+              }
+            }}
+            onPointerUp={() => {
+              if (mode === 'xuser') handleXDragEnd()
+              if (mode === 'pintar') { setIsPainting(false); lastPainted.current = null }
+            }}
             style={{
-              background: cell.color === '#ffffff' ? 'var(--cell-empty)' : cell.color,
-              border: `1px solid ${cell.color === '#ffffff' ? 'var(--cell-border)' : 'transparent'}`
+              background: cell.color === '#ffffff'? 'var(--cell-empty)' : cell.color,
+              border: `1px solid ${cell.color === '#ffffff'? 'var(--cell-border)' : 'transparent'}`,
+              touchAction: 'none'
             }}
           >
             {cell.mark==='circle'&&<div className="mark-emoji">🐱</div>}
@@ -338,17 +393,11 @@ export default function App(){
             {cell.mark==='x-auto'&&<div className="mark-x auto">✕</div>}
           </div>
         )))}
-
       </div>
+
 
       <div className="status">{status}</div>
       {blockedColors.length>0&&<div className="status" style={{display:'flex',gap:6,justifyContent:'center',alignItems:'center'}}>Color bloqueado:{blockedColors.map(c=><span key={c} style={{width:16,height:16,background:c,border:'1px solid #333',borderRadius:3}}/> )}</div>}
-    
-    
-    
-    
-    
-
 
       {cropSrc && (
         <div style={{position:'fixed',inset:0,background:'#000c',zIndex:999,display:'flex',flexDirection:'column'}}>
@@ -369,8 +418,6 @@ export default function App(){
           </div>
         </div>
       )}
-    
-    
     </div>
   )
 }
